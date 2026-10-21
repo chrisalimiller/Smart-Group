@@ -3,7 +3,7 @@
 A Firefox extension that automatically organizes your tabs using Firefox's built-in tab groups.
 
 - **By website:** when 3 or more tabs are open on the same site, they're grouped under that site's name.
-- **By category:** other tabs are sorted into categories like Shopping, Social, News, and Video.
+- **By category:** every other tab is sorted into a category like Shopping, Social, News, or Video. Tabs that don't fit any category go into **Miscellaneous**, so every tab ends up in a group.
 - **Pinned tabs are never grouped.**
 - Groups get their own color and label, and work with tabs on top or vertical tabs on the side.
 - A settings page lets you assign sites to categories, keep an exempt list, and change the threshold.
@@ -32,9 +32,10 @@ A temporary add-on is removed when Firefox restarts.
 
 1. Pinned tabs, exempt sites, and non-web pages (like `about:` pages) are skipped.
 2. Any site with 3 or more open tabs gets its own group, labeled with the site's name.
-3. Remaining tabs are sorted into categories (Shopping, Social, Video, Music, News, Email, Work, Dev, AI, Reference, Travel, Finance) using the list in `src/categories.js`. A category needs at least 2 tabs to become a group.
-4. Groups update automatically as you open, close, and navigate tabs.
-5. Groups you make yourself are never touched. Turning the extension off removes the groups it made.
+3. Every remaining tab is sorted into a category (Shopping, Social, Video, Music, News, Email, Work, Dev, AI, Reference, Travel, Finance). Known sites come from the list in `src/categories.js`. For a site that isn't on the list, Smart Group looks for clues in its address and page title (for example "shop", "flights", or "news"), and treats `.edu` and `.gov` sites as Reference.
+4. Anything that still doesn't fit goes into a **Miscellaneous** group.
+5. Groups update automatically as you open, close, and navigate tabs.
+6. Groups you make yourself are never touched. Turning the extension off removes the groups it made.
 
 ## Settings
 
@@ -42,11 +43,9 @@ Open the menu, choose **Add-ons and themes**, click Smart Group, then **Options*
 
 - Turn automatic grouping on or off
 - Change how many tabs a site needs to get its own group (default 3)
-- Change how many tabs a category needs to become a group (default 2)
 - Add your own rules, like `acme.com` to a new "Acme" category or `github.com` to Work
 - List sites that should never be grouped
-- Turn built-in categories off
-- Put unmatched sites in an "Other" group
+- Turn built-in categories off (their tabs go to Miscellaneous)
 
 Changes apply right away. Settings sync through your Firefox account if you use one.
 

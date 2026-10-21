@@ -14,7 +14,7 @@ const CATEGORY_COLORS = {
   Reference: "yellow",
   Travel: "cyan",
   Finance: "green",
-  Other: "grey",
+  Miscellaneous: "grey",
 };
 
 const DEFAULT_CATEGORY_SITES = {
@@ -52,7 +52,8 @@ const DEFAULT_CATEGORY_SITES = {
   Reference: ["wikipedia.org", "wiktionary.org", "britannica.com", "dictionary.com", "merriam-webster.com"],
   Travel: [
     "booking.com", "airbnb.com", "expedia.com", "kayak.com", "tripadvisor.com", "hotels.com",
-    "google.com/travel", "delta.com", "united.com", "aa.com", "southwest.com",
+    "google.com/travel", "google.com/maps", "maps.google.com", "delta.com", "united.com", "aa.com",
+    "southwest.com", "vrbo.com", "skyscanner.com", "uber.com", "lyft.com",
   ],
   Finance: [
     "paypal.com", "chase.com", "bankofamerica.com", "wellsfargo.com", "fidelity.com",
@@ -60,14 +61,29 @@ const DEFAULT_CATEGORY_SITES = {
   ],
 };
 
-// Fallback hints when a site isn't in any list.
+// The name of the group for sites that don't fit any category.
+const MISC_CATEGORY = "Miscellaneous";
+
+// Fallback hints for sites that aren't in any list, checked in order.
+// First against the site's address, then against the page title.
 const KEYWORD_HINTS = [
-  [/\b(shop|store|deals?|cart)\b/, "Shopping"],
-  [/\bnews\b/, "News"],
-  [/\bmail\b/, "Email"],
-  [/\b(bank|invest|credit)\b/, "Finance"],
+  [/\b(shop|shopping|store|cart|checkout|deals?|sale|outlet|buy)\b/, "Shopping"],
+  [/\b(mail|inbox|webmail)\b/, "Email"],
+  [/\b(news|breaking|headlines|times|herald|gazette|tribune|post)\b/, "News"],
+  [/\b(bank|banking|invest|investing|credit|loan|mortgage|stocks?|crypto|finance|insurance)\b/, "Finance"],
+  [/\b(flights?|hotels?|travel|airlines?|vacation|trip|resort|cruise)\b/, "Travel"],
+  [/\b(music|album|playlist|songs?|lyrics|radio|podcasts?)\b/, "Music"],
+  [/\b(video|videos|watch|episode|movies?|stream|streaming|tv)\b/, "Video"],
+  [/\b(forum|community|social|followers)\b/, "Social"],
+  [/\b(api|sdk|developer|developers|documentation|github|repository|npm|code)\b/, "Dev"],
+  [/\b(ai|chatbot|assistant|gpt|llm)\b/, "AI"],
+  [/\b(wiki|encyclopedia|dictionary|definition|glossary)\b/, "Reference"],
+  [/\b(dashboard|calendar|meeting|project|workspace|docs|spreadsheet|slides)\b/, "Work"],
 ];
 
+// Fallback by top-level domain, for things like universities and government sites.
+const TLD_HINTS = { edu: "Reference", gov: "Reference", mil: "Reference" };
+
 if (typeof module !== "undefined") {
-  module.exports = { CATEGORY_COLORS, DEFAULT_CATEGORY_SITES, KEYWORD_HINTS };
+  module.exports = { CATEGORY_COLORS, DEFAULT_CATEGORY_SITES, KEYWORD_HINTS, TLD_HINTS, MISC_CATEGORY };
 }
