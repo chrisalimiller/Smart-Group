@@ -59,3 +59,14 @@ npm run lint   # Mozilla's extension checker
 npm test       # unit tests, plus a simulated-browser test of the background script
 npm run build  # zips the extension into dist/
 ```
+
+## Releasing a signed build
+
+Firefox only installs permanent add-ons that Mozilla has signed. The `Release` workflow handles this:
+
+1. Create API keys at https://addons.mozilla.org/developers/addon/api/key/ (free, needs a Firefox account).
+2. Add them to this repo under **Settings → Secrets and variables → Actions** as `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`.
+3. Bump `version` in `src/manifest.json`, then push a matching tag, for example `git tag v0.1.0 && git push origin v0.1.0`.
+
+The workflow signs the add-on as unlisted (it won't appear on the add-ons store) and attaches the `.xpi` to a GitHub release.
+
