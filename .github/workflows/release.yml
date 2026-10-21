@@ -1,5 +1,5 @@
-# Signs the extension with Mozilla (unlisted, so it isn't published on the add-ons store)
-# and attaches the installable .xpi to a GitHub release.
+# Submits the extension to the Firefox Add-ons store (addons.mozilla.org) for review,
+# then makes a GitHub release with the notes. Mozilla signs and publishes it once approved.
 # Needs two repository secrets from https://addons.mozilla.org/developers/addon/api/key/ :
 #   AMO_JWT_ISSUER and AMO_JWT_SECRET
 # To release: bump "version" in src/manifest.json, then push a tag like v0.1.0.
@@ -24,12 +24,16 @@ jobs:
         run: |
           v=$(node -p "require('./src/manifest.json').version")
           [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME does not match manifest version $v"; exit 1; }
-      - name: Sign with Mozilla
-        run: npx web-ext sign --source-dir src --channel unlisted --artifacts-dir dist --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET"
+      - name: Submit to the Firefox Add-ons store
+        # Store review can take days, so don't wait for it. amo-metadata.json holds the
+        # store listing details Mozilla needs for the first submission.
+        run: >
+          npx web-ext sign --source-dir src --channel listed --amo-metadata amo-metadata.json
+          --approval-timeout 0 --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET"
         env:
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
           AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
-      - name: Publish release
-        run: gh release create "$GITHUB_REF_NAME" dist/*.xpi --title "Smart Group $GITHUB_REF_NAME" --generate-notes
+      - name: Publish release notes
+        run: gh release create "$GITHUB_REF_NAME" --title "Smart Group $GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

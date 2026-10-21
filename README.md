@@ -8,17 +8,15 @@ A Firefox extension that automatically organizes your tabs using Firefox's built
 - Groups get their own color and label, and work with tabs on top or vertical tabs on the side.
 - A settings page lets you assign sites to categories, keep an exempt list, and change the threshold.
 
-> Status: v0.1.0. Auto-grouping and settings work; signed release coming next.
+> Status: v0.1.0. Auto-grouping and settings work; submitting to the Firefox Add-ons store next.
 
 ## Requirements
 
 Firefox 139 or newer (the first version with the tab groups extension API), on macOS or Windows.
 
-## Install a release (Mac or Windows)
+## Install (Mac or Windows)
 
-1. Download the latest `.xpi` file from this repo's Releases page.
-2. In Firefox, open the menu, choose **Add-ons and themes**, click the gear icon, and pick **Install Add-on From File…**
-3. Select the `.xpi` file and confirm.
+Once it's approved, install Smart Group from the Firefox Add-ons store: search for "Smart Group" at https://addons.mozilla.org and click **Add to Firefox**.
 
 ## Try it from source (temporary)
 
@@ -60,13 +58,17 @@ npm test       # unit tests, plus a simulated-browser test of the background scr
 npm run build  # zips the extension into dist/
 ```
 
-## Releasing a signed build
+## Publishing to the Firefox Add-ons store
 
-Firefox only installs permanent add-ons that Mozilla has signed. The `Release` workflow handles this:
+Firefox only installs permanent add-ons that Mozilla has signed. The `Release` workflow submits each new version to addons.mozilla.org (AMO), where Mozilla reviews, signs and publishes it.
 
+One-time setup:
 1. Create API keys at https://addons.mozilla.org/developers/addon/api/key/ (free, needs a Firefox account).
-2. Add them to this repo under **Settings → Secrets and variables → Actions** as `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`.
-3. Bump `version` in `src/manifest.json`, then push a matching tag, for example `git tag v0.1.0 && git push origin v0.1.0`.
+2. Add them to this repo as Actions secrets named `AMO_JWT_ISSUER` (the "JWT issuer") and `AMO_JWT_SECRET` (the "JWT secret"), for example with `gh secret set AMO_JWT_ISSUER`.
 
-The workflow signs the add-on as unlisted (it won't appear on the add-ons store) and attaches the `.xpi` to a GitHub release.
+For each release:
+1. Bump `version` in `src/manifest.json` and merge it to `main`.
+2. Push a matching tag, for example `git tag v0.1.0 && git push origin v0.1.0`.
+3. Watch the Actions tab, then check the add-on's status at https://addons.mozilla.org/developers/addons. Review usually takes a few days.
 
+The store listing's category, summary and license come from `amo-metadata.json`. After the first submission, edit the listing (description, screenshots, icon) on the AMO site.
