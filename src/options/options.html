@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smart Group settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Smart Group settings</h1>
+      <span id="saved" class="saved" aria-live="polite"></span>
+    </header>
+
+    <section>
+      <label class="row toggle">
+        <input type="checkbox" id="enabled">
+        <span><strong>Group tabs automatically</strong><br>
+          <small>Turning this off removes the groups Smart Group made. Groups you made yourself stay.</small></span>
+      </label>
+    </section>
+
+    <section>
+      <h2>Grouping rules</h2>
+      <label class="row">
+        <span>Group by website when a site has at least</span>
+        <input type="number" id="siteThreshold" min="2" max="20"> <span>tabs open</span>
+      </label>
+      <label class="row">
+        <span>A category needs at least</span>
+        <input type="number" id="minCategorySize" min="1" max="20"> <span>tabs to become a group</span>
+      </label>
+      <label class="row toggle">
+        <input type="checkbox" id="groupUncategorized">
+        <span>Put sites that don't match any category in an "Other" group</span>
+      </label>
+    </section>
+
+    <section>
+      <h2>Your category rules</h2>
+      <p class="hint">Assign a site to a category. Your rules win over the built-in list. Type a new name to make your own category.
+        A rule like <code>google.com</code> also covers <code>mail.google.com</code>, and <code>google.com/travel</code> covers just that section.</p>
+      <form id="ruleForm" class="add">
+        <input id="ruleSite" placeholder="Site, e.g. acme.com" required aria-label="Site">
+        <input id="ruleCategory" list="categoryList" placeholder="Category" required aria-label="Category">
+        <datalist id="categoryList"></datalist>
+        <button type="submit">Add rule</button>
+      </form>
+      <ul id="rules" class="list"></ul>
+    </section>
+
+    <section>
+      <h2>Never group these sites</h2>
+      <p class="hint">Tabs from these sites always stay out of groups. Pinned tabs are never grouped either.</p>
+      <form id="exemptForm" class="add">
+        <input id="exemptSite" placeholder="Site, e.g. calendar.google.com" required aria-label="Site to exempt">
+        <button type="submit">Add site</button>
+      </form>
+      <ul id="exempt" class="list"></ul>
+    </section>
+
+    <section>
+      <h2>Built-in categories</h2>
+      <p class="hint">Uncheck a category to stop using it. Open one to see the sites it covers.</p>
+      <div id="builtIn"></div>
+    </section>
+
+    <footer>
+      <button id="reset" class="secondary">Reset all settings</button>
+    </footer>
+  </main>
+  <script src="../categories.js"></script>
+  <script src="../grouping.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

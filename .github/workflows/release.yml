@@ -1,0 +1,35 @@
+# Signs the extension with Mozilla (unlisted, so it isn't published on the add-ons store)
+# and attaches the installable .xpi to a GitHub release.
+# Needs two repository secrets from https://addons.mozilla.org/developers/addon/api/key/ :
+#   AMO_JWT_ISSUER and AMO_JWT_SECRET
+# To release: bump "version" in src/manifest.json, then push a tag like v0.1.0.
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Check the tag matches the manifest version
+        run: |
+          v=$(node -p "require('./src/manifest.json').version")
+          [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME does not match manifest version $v"; exit 1; }
+      - name: Sign with Mozilla
+        run: npx web-ext sign --source-dir src --channel unlisted --artifacts-dir dist --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET"
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+      - name: Publish release
+        run: gh release create "$GITHUB_REF_NAME" dist/*.xpi --title "Smart Group $GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

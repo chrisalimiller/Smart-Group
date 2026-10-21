@@ -1,0 +1,39 @@
+:root {
+  --bg: #f9f9fb; --card: #ffffff; --text: #15141a; --muted: #5b5b66; --border: #d7d7db;
+  --accent: #0061e0; --accent-text: #ffffff; --danger: #c50042;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1c1b22; --card: #2b2a33; --text: #fbfbfe; --muted: #a8a8b3; --border: #52525e;
+    --accent: #00ddff; --accent-text: #15141a; --danger: #ff848b; }
+}
+* { box-sizing: border-box; }
+body { font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; background: var(--bg); color: var(--text); }
+main { max-width: 720px; margin: 32px auto; padding: 0 16px 48px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h1 { font-size: 24px; margin: 0 0 16px; }
+h2 { font-size: 17px; margin: 0 0 8px; }
+section { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.toggle { align-items: flex-start; }
+.toggle input { margin-top: 4px; }
+small, .hint { color: var(--muted); }
+.hint { margin: 0 0 12px; font-size: 14px; }
+code { font-size: 13px; }
+input, button { font: inherit; color: inherit; }
+input[type="number"] { width: 4.5em; }
+input:not([type]), input[type="number"] { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; }
+.add { display: flex; gap: 8px; flex-wrap: wrap; }
+.add input { flex: 1 1 180px; min-width: 0; }
+button { background: var(--accent); color: var(--accent-text); border: 0; border-radius: 4px; padding: 5px 14px; cursor: pointer; }
+button.secondary { background: transparent; color: var(--danger); border: 1px solid var(--border); }
+button.remove { background: transparent; color: var(--muted); padding: 0 6px; font-size: 18px; line-height: 1; }
+button.remove:hover { color: var(--danger); }
+.list { list-style: none; margin: 12px 0 0; padding: 0; }
+.list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.list .empty { color: var(--muted); border: 0; }
+.tag { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: 13px; margin-left: 6px; color: #15141a; }
+details { border-top: 1px solid var(--border); padding: 6px 0; }
+details summary { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+details p { margin: 6px 0 0 28px; color: var(--muted); font-size: 13px; }
+.saved { color: var(--muted); font-size: 14px; }
+footer { text-align: right; }
