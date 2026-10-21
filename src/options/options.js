@@ -12,6 +12,9 @@ const $ = (id) => document.getElementById(id);
 async function load() {
   const stored = await browser.storage.sync.get("settings");
   settings = { ...structuredClone(DEFAULT_SETTINGS), ...(stored.settings || {}) };
+  // Options from earlier versions that no longer exist.
+  delete settings.minCategorySize;
+  delete settings.groupUncategorized;
   render();
 }
 
@@ -54,8 +57,6 @@ function tag(category) {
 function render() {
   $("enabled").checked = settings.enabled;
   $("siteThreshold").value = settings.siteThreshold;
-  $("minCategorySize").value = settings.minCategorySize;
-  $("groupUncategorized").checked = settings.groupUncategorized;
 
   const categories = new Set([...Object.keys(DEFAULT_CATEGORY_SITES), ...settings.customRules.map((r) => r.category)]);
   $("categoryList").replaceChildren(...[...categories].sort().map((c) => Object.assign(document.createElement("option"), { value: c })));
@@ -115,12 +116,8 @@ function clampNumber(input, min, max, fallback) {
 }
 
 $("enabled").addEventListener("change", (e) => { settings.enabled = e.target.checked; save(); });
-$("groupUncategorized").addEventListener("change", (e) => { settings.groupUncategorized = e.target.checked; save(); });
 $("siteThreshold").addEventListener("change", (e) => {
   settings.siteThreshold = clampNumber(e.target, 2, 20, DEFAULT_SETTINGS.siteThreshold); save();
-});
-$("minCategorySize").addEventListener("change", (e) => {
-  settings.minCategorySize = clampNumber(e.target, 1, 20, DEFAULT_SETTINGS.minCategorySize); save();
 });
 
 $("ruleForm").addEventListener("submit", (e) => {

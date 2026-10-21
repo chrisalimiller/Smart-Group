@@ -1,16 +1,14 @@
 // Pure grouping logic: given a window's tabs and the user's settings,
 // decide which tabs belong in which group. No browser calls here, so it can be tested in Node.
 
-/* global CATEGORY_COLORS, DEFAULT_CATEGORY_SITES, KEYWORD_HINTS */
+/* global CATEGORY_COLORS, DEFAULT_CATEGORY_SITES, KEYWORD_HINTS, TLD_HINTS, MISC_CATEGORY */
 if (typeof module !== "undefined") {
-  ({ CATEGORY_COLORS, DEFAULT_CATEGORY_SITES, KEYWORD_HINTS } = require("./categories.js"));
+  ({ CATEGORY_COLORS, DEFAULT_CATEGORY_SITES, KEYWORD_HINTS, TLD_HINTS, MISC_CATEGORY } = require("./categories.js"));
 }
 
 const DEFAULT_SETTINGS = {
   enabled: true,
   siteThreshold: 3, // this many tabs on one site -> a site group
-  minCategorySize: 2, // a category group needs at least this many tabs
-  groupUncategorized: false, // put unknown sites in an "Other" group
   exemptSites: [], // sites that are never grouped
   customRules: [], // [{ site: "example.com", category: "Work" }]
   disabledCategories: [], // built-in categories the user turned off
@@ -61,7 +59,9 @@ function bestMatch(url, entries) {
   return best ? best[1] : null;
 }
 
-function categoryOf(url, settings) {
+// Pick a category for a tab. Returns null when nothing fits (the caller uses Miscellaneous).
+function categoryOf(url, settings, title = "") {
+  settings = settings || {};
   const custom = (settings.customRules || []).map((r) => [normalizeSitePattern(r.site), r.category]);
   const fromCustom = bestMatch(url, custom);
   if (fromCustom) return fromCustom;
@@ -75,11 +75,17 @@ function categoryOf(url, settings) {
   const fromBuiltIn = bestMatch(url, builtIn);
   if (fromBuiltIn) return fromBuiltIn;
 
+  // Unknown site: look for hints in its address, then in the page title.
   const host = siteOf(url) || "";
-  const words = host.replace(/[.-]/g, " ");
-  for (const [re, category] of KEYWORD_HINTS) {
-    if (!disabled.has(category) && re.test(words)) return category;
+  const hostWords = host.replace(/[.-]/g, " ");
+  const titleWords = String(title || "").toLowerCase();
+  for (const text of [hostWords, titleWords]) {
+    for (const [re, category] of KEYWORD_HINTS) {
+      if (!disabled.has(category) && re.test(text)) return category;
+    }
   }
+  const tldCategory = TLD_HINTS[host.split(".").pop()];
+  if (tldCategory && !disabled.has(tldCategory)) return tldCategory;
   return null;
 }
 
@@ -109,10 +115,12 @@ function categoryColor(category) {
 
 /**
  * Decide the groups for one window.
- * @param {Array<{id:number,url:string,pinned:boolean}>} tabs
+ * Every eligible tab ends up in exactly one group: its site's group if the site has
+ * enough tabs, otherwise its category, otherwise Miscellaneous.
+ * @param {Array<{id:number,url:string,title?:string,pinned:boolean}>} tabs
  * @param {object} settings
  * @returns {{groups: Array<{key:string,title:string,color:string,tabIds:number[]}>, ungrouped: number[]}}
- *   `ungrouped` lists eligible tabs that should not be in any of our groups.
+ *   `ungrouped` lists tabs that should not be in any of our groups (pinned, exempt, non-web).
  */
 function planGroups(tabs, settings) {
   settings = { ...DEFAULT_SETTINGS, ...(settings || {}) };
@@ -140,25 +148,20 @@ function planGroups(tabs, settings) {
     }
   }
 
+  // Every remaining tab goes into a category; unknown sites go to Miscellaneous.
   const byCategory = new Map();
-  const ungrouped = [];
   for (const t of leftover) {
-    let cat = categoryOf(t.url, settings);
-    if (!cat && settings.groupUncategorized) cat = "Other";
-    if (!cat) {
-      ungrouped.push(t.id);
-      continue;
-    }
+    const cat = categoryOf(t.url, settings, t.title) || MISC_CATEGORY;
     if (!byCategory.has(cat)) byCategory.set(cat, []);
     byCategory.get(cat).push(t);
   }
   for (const [cat, catTabs] of byCategory) {
-    if (catTabs.length >= settings.minCategorySize) {
-      groups.push({ key: "cat:" + cat, title: cat, color: categoryColor(cat), tabIds: catTabs.map((t) => t.id) });
-    } else {
-      ungrouped.push(...catTabs.map((t) => t.id));
-    }
+    groups.push({ key: "cat:" + cat, title: cat, color: categoryColor(cat), tabIds: catTabs.map((t) => t.id) });
   }
+
+  // Anything not in a planned group (pinned, exempt, or not a web page) stays out of our groups.
+  const grouped = new Set(groups.flatMap((g) => g.tabIds));
+  const ungrouped = tabs.filter((t) => !grouped.has(t.id)).map((t) => t.id);
 
   // Keep groups in the order their first tab appears, so the tab strip doesn't jump around.
   const order = new Map(tabs.map((t, i) => [t.id, i]));

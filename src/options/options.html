@@ -17,7 +17,7 @@
       <label class="row toggle">
         <input type="checkbox" id="enabled">
         <span><strong>Group tabs automatically</strong><br>
-          <small>Turning this off removes the groups Smart Group made. Groups you made yourself stay.</small></span>
+          <small>Puts every tab except pinned tabs and exempt sites into a group. Turning this off removes the groups Smart Group made. Groups you made yourself stay.</small></span>
       </label>
     </section>
 
@@ -27,14 +27,7 @@
         <span>Group by website when a site has at least</span>
         <input type="number" id="siteThreshold" min="2" max="20"> <span>tabs open</span>
       </label>
-      <label class="row">
-        <span>A category needs at least</span>
-        <input type="number" id="minCategorySize" min="1" max="20"> <span>tabs to become a group</span>
-      </label>
-      <label class="row toggle">
-        <input type="checkbox" id="groupUncategorized">
-        <span>Put sites that don't match any category in an "Other" group</span>
-      </label>
+      <p class="hint">Every other tab is sorted into a category. Tabs that don't fit any category go into a "Miscellaneous" group.</p>
     </section>
 
     <section>
@@ -62,7 +55,7 @@
 
     <section>
       <h2>Built-in categories</h2>
-      <p class="hint">Uncheck a category to stop using it. Open one to see the sites it covers.</p>
+      <p class="hint">Uncheck a category to stop using it (its tabs go to Miscellaneous instead). Open one to see the sites it covers. Sites not on any list are matched by words in their address or page title.</p>
       <div id="builtIn"></div>
     </section>
 

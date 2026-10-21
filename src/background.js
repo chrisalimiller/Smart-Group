@@ -55,6 +55,7 @@ async function regroupWindow(windowId) {
   const ours = managedIds(windowId);
   const allTabs = await browser.tabs.query({ windowId });
   // Tabs in a group the user made themselves are off limits.
+  // ("status" above re-checks a tab once its page loads, so its title can help pick a category.)
   const tabs = allTabs.filter((t) => t.groupId === undefined || t.groupId === NO_GROUP || ours.has(t.groupId));
   const tabById = new Map(tabs.map((t) => [t.id, t]));
 
@@ -124,7 +125,7 @@ browser.tabs.onCreated.addListener((tab) => schedule(tab.windowId));
 browser.tabs.onRemoved.addListener((_id, info) => {
   if (!info.isWindowClosing) schedule(info.windowId);
 });
-browser.tabs.onUpdated.addListener((_id, _change, tab) => schedule(tab.windowId), { properties: ["url", "pinned"] });
+browser.tabs.onUpdated.addListener((_id, _change, tab) => schedule(tab.windowId), { properties: ["url", "pinned", "status"] });
 browser.tabs.onAttached.addListener((_id, info) => schedule(info.newWindowId));
 browser.tabs.onDetached.addListener((_id, info) => schedule(info.oldWindowId));
 browser.windows.onRemoved.addListener((windowId) => {

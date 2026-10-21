@@ -25,7 +25,7 @@ test("groups tabs as they open, and regroups when one closes", async () => {
   fake.open("https://amazon.com"); fake.open("https://ebay.com"); fake.open("https://reddit.com");
   await wait();
   // Two GitHub tabs are below the site threshold, so they land in the Dev category.
-  assert.deepStrictEqual(fake.layout(), { Dev: ["github.com", "github.com"], Shopping: ["amazon.com", "ebay.com"], "(none)": ["reddit.com"] });
+  assert.deepStrictEqual(fake.layout(), { Dev: ["github.com", "github.com"], Shopping: ["amazon.com", "ebay.com"], Social: ["reddit.com"] });
 
   gh.push(fake.open("https://github.com/c"));
   await wait();
@@ -62,7 +62,7 @@ test("navigating a tab moves it to the right group", async () => {
   fake.navigate(t.id, "https://x.com");
   await wait();
   const l = fake.layout();
-  assert.strictEqual(l["Shopping"], undefined);
+  assert.deepStrictEqual(l["Shopping"], ["amazon.com"]);
   assert.deepStrictEqual(l["Social"].sort(), ["reddit.com", "x.com"]);
 });
 
@@ -70,13 +70,27 @@ test("settings changes apply right away, and turning it off removes our groups",
   const fake = await boot();
   fake.open("https://foo.dev/1"); fake.open("https://foo.dev/2");
   await wait();
-  assert.strictEqual(fake.groups.size, 0);
+  assert.deepStrictEqual(Object.keys(fake.layout()), ["Miscellaneous"]);
   await fake.browser.storage.sync.set({ settings: { siteThreshold: 2 } });
   await wait();
   assert.deepStrictEqual(Object.keys(fake.layout()), ["Foo"]);
   await fake.browser.storage.sync.set({ settings: { siteThreshold: 2, enabled: false } });
   await wait();
   assert.deepStrictEqual(Object.keys(fake.layout()), ["(none)"]);
+});
+
+test("every new site lands in a group, and exempting a site pulls it out", async () => {
+  const fake = await boot();
+  fake.open("about:newtab");
+  const t = fake.open("https://some-new-site.example");
+  await wait();
+  assert.deepStrictEqual(fake.layout(), { "(none)": [""], Miscellaneous: ["some-new-site.example"] });
+  fake.navigate(t.id, "https://www.target.com");
+  await wait();
+  assert.deepStrictEqual(fake.layout()["Shopping"], ["target.com"]);
+  await fake.browser.storage.sync.set({ settings: { exemptSites: ["target.com"] } });
+  await wait();
+  assert.strictEqual(fake.groups.size, 0);
 });
 
 test("existing tabs get grouped on startup", async () => {
