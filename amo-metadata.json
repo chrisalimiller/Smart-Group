@@ -1,0 +1,12 @@
+{
+  "categories": ["tabs"],
+  "summary": {
+    "en-US": "Automatically groups your tabs by website or by category, using Firefox's built-in tab groups. Learns from you when you drag a tab into a group."
+  },
+  "homepage": {
+    "en-US": "https://github.com/chrisalimiller/Smart-Group"
+  },
+  "version": {
+    "license": "GPL-3.0-only"
+  }
+}
