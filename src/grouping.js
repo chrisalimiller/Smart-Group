@@ -169,6 +169,6 @@ function planGroups(tabs, settings) {
 if (typeof module !== "undefined") {
   module.exports = {
     DEFAULT_SETTINGS, siteOf, normalizeSitePattern, matchesPattern, categoryOf,
-    isExempt, siteLabel, planGroups,
+    isExempt, siteLabel, categoryColor, planGroups,
   };
 }

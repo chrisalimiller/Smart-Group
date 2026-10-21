@@ -8,7 +8,7 @@ A Firefox extension that automatically organizes your tabs using Firefox's built
 - Groups get their own color and label, and work with tabs on top or vertical tabs on the side.
 - A settings page lets you assign sites to categories, keep an exempt list, and change the threshold.
 
-> Status: v0.1.0. Auto-grouping works; the settings page is in progress.
+> Status: v0.1.0. Auto-grouping and settings work; signed release coming next.
 
 ## Requirements
 
@@ -35,6 +35,20 @@ A temporary add-on is removed when Firefox restarts.
 3. Remaining tabs are sorted into categories (Shopping, Social, Video, Music, News, Email, Work, Dev, AI, Reference, Travel, Finance) using the list in `src/categories.js`. A category needs at least 2 tabs to become a group.
 4. Groups update automatically as you open, close, and navigate tabs.
 5. Groups you make yourself are never touched. Turning the extension off removes the groups it made.
+
+## Settings
+
+Open the menu, choose **Add-ons and themes**, click Smart Group, then **Options**. You can:
+
+- Turn automatic grouping on or off
+- Change how many tabs a site needs to get its own group (default 3)
+- Change how many tabs a category needs to become a group (default 2)
+- Add your own rules, like `acme.com` to a new "Acme" category or `github.com` to Work
+- List sites that should never be grouped
+- Turn built-in categories off
+- Put unmatched sites in an "Other" group
+
+Changes apply right away. Settings sync through your Firefox account if you use one.
 
 ## Development
 
