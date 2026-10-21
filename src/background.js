@@ -2,13 +2,17 @@
 // with the plan from grouping.js. Only touches groups it created itself, so groups
 // the user makes by hand are left alone.
 
-/* global planGroups, DEFAULT_SETTINGS */
+/* global planGroups, DEFAULT_SETTINGS, siteOf, isExempt, normalizeSitePattern */
 
 const NO_GROUP = -1;
 let settings = { ...DEFAULT_SETTINGS };
 
 // windowId -> { [groupKey]: groupId } for groups this extension created.
 let managed = {};
+
+// tabId -> the groupId this extension last put the tab in. If a tab shows up in one of
+// our groups that isn't this one, the user moved it there.
+const placedBy = new Map();
 
 async function loadState() {
   const stored = await browser.storage.sync.get("settings");
@@ -32,6 +36,12 @@ async function groupExists(groupId) {
   } catch {
     return false;
   }
+}
+
+// Asked fresh each time, since a tab can be pinned while a regroup is in progress.
+async function pinnedTabIds(windowId) {
+  const pinned = await browser.tabs.query({ windowId, pinned: true });
+  return new Set(pinned.map((t) => t.id));
 }
 
 async function ungroupManaged(windowId) {
@@ -64,15 +74,22 @@ async function regroupWindow(windowId) {
   const nextGroups = {};
 
   for (const g of plan.groups) {
+    // Pinned tabs are never grouped, even ones pinned after the tab list above was read.
+    const pinnedNow = await pinnedTabIds(windowId);
+    const tabIds = g.tabIds.filter((id) => !pinnedNow.has(id));
+    if (!tabIds.length) continue;
+
     let groupId = windowGroups[g.key];
     if (groupId !== undefined && !(await groupExists(groupId))) groupId = undefined;
 
-    const toMove = g.tabIds.filter((id) => tabById.get(id).groupId !== groupId);
+    const toMove = tabIds.filter((id) => tabById.get(id).groupId !== groupId);
     if (groupId === undefined) {
-      groupId = await browser.tabs.group({ tabIds: g.tabIds, createProperties: { windowId } });
+      groupId = await browser.tabs.group({ tabIds, createProperties: { windowId } });
     } else if (toMove.length) {
+      for (const id of toMove) placedBy.set(id, groupId);
       await browser.tabs.group({ tabIds: toMove, groupId });
     }
+    for (const id of tabIds) placedBy.set(id, groupId);
 
     const info = await browser.tabGroups.get(groupId);
     if (info.title !== g.title || info.color !== g.color) {
@@ -82,10 +99,34 @@ async function regroupWindow(windowId) {
   }
 
   const toUngroup = plan.ungrouped.filter((id) => ours.has(tabById.get(id).groupId));
+  for (const id of toUngroup) placedBy.set(id, NO_GROUP);
   if (toUngroup.length) await browser.tabs.ungroup(toUngroup);
 
   managed[windowId] = nextGroups;
   await saveManaged();
+}
+
+// When the user drags a tab into one of our category groups, remember the tab's site
+// so it goes to that category from now on. Saved as a custom rule, editable in Options.
+async function learnFromMove(tab) {
+  if (!settings.enabled || tab.pinned || placedBy.get(tab.id) === tab.groupId) return;
+  const groups = managed[tab.windowId] || {};
+  const key = Object.keys(groups).find((k) => groups[k] === tab.groupId);
+  // Brand-new groups aren't recorded until the regroup finishes, so our own moves into them
+  // are skipped here too. Site groups are skipped: a site rule can't send another site there.
+  if (!key || !key.startsWith("cat:")) return;
+  const site = siteOf(tab.url);
+  if (!site || isExempt(tab.url, settings)) return;
+
+  placedBy.set(tab.id, tab.groupId);
+  const category = key.slice("cat:".length);
+  const rules = settings.customRules || [];
+  const sameSite = (r) => normalizeSitePattern(r.site) === site;
+  if (rules.some((r) => sameSite(r) && r.category === category)) return;
+  // Replaces any older rule for this site. Saving triggers storage.onChanged, which
+  // regroups every window with the new rule.
+  settings = { ...settings, customRules: [...rules.filter((r) => !sameSite(r)), { site, category }] };
+  await browser.storage.sync.set({ settings });
 }
 
 // Run at most one regroup per window at a time, and batch bursts of tab events.
@@ -122,10 +163,17 @@ async function scheduleAll() {
 }
 
 browser.tabs.onCreated.addListener((tab) => schedule(tab.windowId));
-browser.tabs.onRemoved.addListener((_id, info) => {
+browser.tabs.onRemoved.addListener((id, info) => {
+  placedBy.delete(id);
   if (!info.isWindowClosing) schedule(info.windowId);
 });
 browser.tabs.onUpdated.addListener((_id, _change, tab) => schedule(tab.windowId), { properties: ["url", "pinned", "status"] });
+browser.tabs.onUpdated.addListener(
+  (_id, change, tab) => {
+    if ("groupId" in change) learnFromMove(tab).catch((err) => console.error("Smart Group: learning failed", err));
+  },
+  { properties: ["groupId"] },
+);
 browser.tabs.onAttached.addListener((_id, info) => schedule(info.newWindowId));
 browser.tabs.onDetached.addListener((_id, info) => schedule(info.oldWindowId));
 browser.windows.onRemoved.addListener((windowId) => {

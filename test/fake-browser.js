@@ -1,8 +1,20 @@
 // A small in-memory stand-in for Firefox's tabs/tabGroups APIs, enough to run background.js.
 function createFakeBrowser() {
   const listeners = {};
-  const on = (name) => ({ addListener: (fn) => (listeners[name] = listeners[name] || []).push(fn) });
-  const fire = (name, ...args) => (listeners[name] || []).forEach((fn) => fn(...args));
+  const on = (name) => ({ addListener: (fn, filter) => (listeners[name] = listeners[name] || []).push({ fn, filter }) });
+  const fire = (name, ...args) => (listeners[name] || []).forEach(({ fn }) => fn(...args));
+  // tabs.onUpdated honors the `properties` filter, like Firefox.
+  const fireUpdated = (id, change) => {
+    const tab = { ...tabs.find((t) => t.id === id) };
+    for (const { fn, filter } of listeners["tabs.onUpdated"] || []) {
+      if (!filter || !filter.properties || filter.properties.some((p) => p in change)) fn(id, change, tab);
+    }
+  };
+  const setGroup = (t, groupId) => {
+    if (t.groupId === groupId) return;
+    t.groupId = groupId;
+    fireUpdated(t.id, { groupId });
+  };
   const tabs = []; // ordered list
   const groups = new Map();
   let nextTab = 1, nextGroup = 100;
@@ -33,7 +45,10 @@ function createFakeBrowser() {
     storage: { sync: area("sync"), session: area("session"), onChanged: on("storage.onChanged") },
     runtime: { onMessage: on("runtime.onMessage") },
     tabs: {
-      query: async ({ windowId }) => tabs.filter((t) => t.windowId === windowId).map((t, index) => ({ ...t, index })),
+      query: async ({ windowId, pinned }) =>
+        tabs
+          .map((t, index) => ({ ...t, index }))
+          .filter((t) => t.windowId === windowId && (pinned === undefined || t.pinned === pinned)),
       group: async ({ tabIds, groupId, createProperties }) => {
         if (groupId === undefined) {
           groupId = nextGroup++;
@@ -41,7 +56,7 @@ function createFakeBrowser() {
         } else if (!groups.has(groupId)) throw new Error("no group");
         // Move grouped tabs next to each other, after the group's first tab.
         const moving = tabs.filter((t) => tabIds.includes(t.id));
-        moving.forEach((t) => (t.groupId = groupId));
+        moving.forEach((t) => setGroup(t, groupId));
         const rest = tabs.filter((t) => !tabIds.includes(t.id));
         let at = rest.findIndex((t) => t.groupId === groupId);
         if (at === -1) at = Math.min(...moving.map((t) => tabs.indexOf(t)));
@@ -52,7 +67,7 @@ function createFakeBrowser() {
         return groupId;
       },
       ungroup: async (ids) => {
-        tabs.forEach((t) => ids.includes(t.id) && (t.groupId = -1));
+        tabs.forEach((t) => ids.includes(t.id) && setGroup(t, -1));
         cleanupGroups();
       },
       onCreated: on("tabs.onCreated"), onRemoved: on("tabs.onRemoved"), onUpdated: on("tabs.onUpdated"),
@@ -83,8 +98,23 @@ function createFakeBrowser() {
     navigate(id, url) {
       const t = tabs.find((x) => x.id === id);
       t.url = url;
-      fire("tabs.onUpdated", id, { url }, { ...t });
+      fireUpdated(id, { url });
     },
+    pin(id) {
+      const t = tabs.find((x) => x.id === id);
+      t.pinned = true;
+      fireUpdated(id, { pinned: true });
+    },
+    // The user drags a tab into an existing group.
+    moveToGroup(id, groupId) {
+      const t = tabs.find((x) => x.id === id);
+      const rest = tabs.filter((x) => x !== t);
+      let at = rest.findLastIndex((x) => x.groupId === groupId) + 1;
+      tabs.splice(0, tabs.length, ...rest.slice(0, at), t, ...rest.slice(at));
+      setGroup(t, groupId);
+      cleanupGroups();
+    },
+    groupByTitle: (title) => [...groups.values()].find((g) => g.title === title),
     // Snapshot: { "Title": [urls...] , "(none)": [...] }
     layout() {
       const out = {};

@@ -35,7 +35,8 @@ A temporary add-on is removed when Firefox restarts.
 3. Every remaining tab is sorted into a category (Shopping, Social, Video, Music, News, Email, Work, Dev, AI, Reference, Travel, Finance). Known sites come from the list in `src/categories.js`. For a site that isn't on the list, Smart Group looks for clues in its address and page title (for example "shop", "flights", or "news"), and treats `.edu` and `.gov` sites as Reference.
 4. Anything that still doesn't fit goes into a **Miscellaneous** group.
 5. Groups update automatically as you open, close, and navigate tabs.
-6. Groups you make yourself are never touched. Turning the extension off removes the groups it made.
+6. **It learns from you.** Drag a tab into one of Smart Group's category groups (like Shopping or Miscellaneous) and that tab's site goes to that category from then on. This is saved as a rule you can see or remove in Settings. Moves into site groups or groups you made yourself don't create rules, and a site with 3 or more open tabs still gets its own site group.
+7. Groups you make yourself are never touched. Turning the extension off removes the groups it made.
 
 ## Settings
 
