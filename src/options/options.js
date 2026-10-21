@@ -148,4 +148,10 @@ $("reset").addEventListener("click", async () => {
   render();
 });
 
+// Pick up rules learned while this page is open (from dragging tabs between groups),
+// so saving here doesn't overwrite them.
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.settings) load();
+});
+
 load();

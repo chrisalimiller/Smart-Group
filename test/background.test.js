@@ -54,6 +54,89 @@ test("pinned tabs and user-made groups are left alone", async () => {
   assert.ok(fake.tabs.find((t) => t.pinned).groupId === -1);
 });
 
+test("pinning a grouped tab takes it out of the group", async () => {
+  const fake = await boot();
+  const t = fake.open("https://amazon.com"); fake.open("https://ebay.com");
+  await wait();
+  assert.deepStrictEqual(fake.layout()["Shopping"], ["amazon.com", "ebay.com"]);
+  fake.pin(t.id);
+  await wait();
+  assert.strictEqual(fake.tabs.find((x) => x.id === t.id).groupId, -1);
+  assert.deepStrictEqual(fake.layout()["Shopping"], ["ebay.com"]);
+});
+
+test("a tab pinned while a regroup is running is not grouped", async () => {
+  const fake = await boot();
+  const query = fake.browser.tabs.query;
+  let target;
+  // Pin the tab right after the regroup reads the tab list, before it groups anything.
+  fake.browser.tabs.query = async (opts) => {
+    const result = await query(opts);
+    if (target && opts.pinned === undefined) {
+      target.pinned = true;
+      target = null;
+    }
+    return result;
+  };
+  target = fake.open("https://amazon.com");
+  fake.open("https://ebay.com");
+  await wait();
+  assert.strictEqual(fake.tabs[0].pinned, true);
+  assert.strictEqual(fake.tabs.find((t) => t.pinned).groupId, -1);
+  assert.deepStrictEqual(fake.layout()["Shopping"], ["ebay.com"]);
+});
+
+test("dragging a tab into a category group teaches Smart Group that site", async () => {
+  const fake = await boot();
+  fake.open("https://amazon.com"); fake.open("https://ebay.com");
+  const t = fake.open("https://some-new-site.example/page");
+  await wait();
+  assert.deepStrictEqual(fake.layout()["Miscellaneous"], ["some-new-site.example"]);
+
+  fake.moveToGroup(t.id, fake.groupByTitle("Shopping").id);
+  await wait();
+  assert.deepStrictEqual(fake.store.sync.settings.customRules, [{ site: "some-new-site.example", category: "Shopping" }]);
+  assert.deepStrictEqual(fake.layout()["Shopping"], ["amazon.com", "ebay.com", "some-new-site.example"], "the moved tab stays put");
+
+  // Next time that site opens, it goes straight to Shopping.
+  fake.close(t.id);
+  fake.open("https://some-new-site.example/other");
+  await wait();
+  assert.deepStrictEqual(fake.layout()["Shopping"], ["amazon.com", "ebay.com", "some-new-site.example"]);
+  assert.strictEqual(fake.layout()["Miscellaneous"], undefined);
+});
+
+test("moving a site again replaces its learned rule", async () => {
+  const fake = await boot();
+  fake.open("https://amazon.com"); fake.open("https://reddit.com");
+  const t = fake.open("https://some-new-site.example");
+  await wait();
+  fake.moveToGroup(t.id, fake.groupByTitle("Shopping").id);
+  await wait();
+  fake.moveToGroup(t.id, fake.groupByTitle("Social").id);
+  await wait();
+  assert.deepStrictEqual(fake.store.sync.settings.customRules, [{ site: "some-new-site.example", category: "Social" }]);
+  assert.deepStrictEqual(fake.layout()["Social"], ["reddit.com", "some-new-site.example"]);
+});
+
+test("Smart Group's own moves and moves into user-made groups teach nothing", async () => {
+  const fake = await boot();
+  fake.open("https://amazon.com");
+  const t = fake.open("https://etsy.com");
+  const gh = [1, 2, 3].map((n) => fake.open("https://github.com/" + n));
+  await wait();
+  fake.navigate(t.id, "https://x.com"); // regroups the tab into Social by itself
+  fake.close(gh[2].id); // dissolves the site group, so GitHub tabs move to Dev
+  await wait();
+  const user = fake.open("https://cnn.com");
+  await wait();
+  fake.groups.set(999, { id: 999, title: "Mine", color: "red", windowId: 1 });
+  fake.moveToGroup(user.id, 999);
+  await wait();
+  assert.strictEqual(fake.store.sync.settings, undefined, "no rules were saved");
+  assert.deepStrictEqual(fake.layout()["Mine"], ["cnn.com"]);
+});
+
 test("navigating a tab moves it to the right group", async () => {
   const fake = await boot();
   fake.open("https://amazon.com"); const t = fake.open("https://etsy.com"); fake.open("https://reddit.com");
