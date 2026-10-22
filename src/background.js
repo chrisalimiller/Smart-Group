@@ -2,7 +2,7 @@
 // with the plan from grouping.js. Only touches groups it created itself, so groups
 // the user makes by hand are left alone.
 
-/* global planGroups, DEFAULT_SETTINGS, siteOf, isExempt, normalizeSitePattern */
+/* global planGroups, DEFAULT_SETTINGS, siteOf, isExempt, normalizeSitePattern, titlesForSite */
 
 const NO_GROUP = -1;
 let settings = { ...DEFAULT_SETTINGS };
@@ -17,8 +17,9 @@ const placedBy = new Map();
 async function loadState() {
   const stored = await browser.storage.sync.get("settings");
   settings = { ...DEFAULT_SETTINGS, ...(stored.settings || {}) };
-  const session = await browser.storage.session.get("managed");
+  const session = await browser.storage.session.get(["managed", "pageTitles"]);
   managed = session.managed || {};
+  pageTitles = new Map(Object.entries(session.pageTitles || {}).map(([id, p]) => [Number(id), p]));
 }
 
 function saveManaged() {
@@ -129,6 +130,120 @@ async function learnFromMove(tab) {
   await browser.storage.sync.set({ settings });
 }
 
+// "Shorten tab titles": Firefox has no API to rename a tab, so a small script changes each
+// page's title. It only runs while the option is on and the user has granted site access.
+const TITLE_ORIGINS = ["http://*/*", "https://*/*"];
+const TITLE_SCRIPT = {
+  id: "shorten-titles",
+  js: ["title-content.js"],
+  matches: TITLE_ORIGINS,
+  runAt: "document_idle",
+  persistAcrossSessions: false,
+};
+
+// Titles are picked here rather than in each page, so that different pages on the same
+// site (in any window) don't end up with the same title.
+// tabId -> { title, url }: each page's own full title, as the page reported it.
+// Kept in session storage, since Firefox may unload this script when it's idle.
+let pageTitles = new Map();
+// tabId -> { title, url } last sent to that tab, to skip resending the same thing.
+const sentTitles = new Map();
+
+function savePageTitles() {
+  return browser.storage.session.set({ pageTitles: Object.fromEntries(pageTitles) });
+}
+
+// Work out titles for every tab on `host` and send any that changed, except to `skipTabId`
+// (that tab gets its title as the reply to its own message).
+function retitleSite(host, skipTabId) {
+  if (!host) return new Map();
+  const pages = [...pageTitles]
+    .filter(([, p]) => siteOf(p.url) === host)
+    .map(([id, p]) => ({ id, ...p }))
+    .sort((a, b) => a.id - b.id);
+  const titles = titlesForSite(pages, host);
+  for (const [id, title] of titles) {
+    if (id === skipTabId) continue;
+    const { url } = pageTitles.get(id);
+    const last = sentTitles.get(id);
+    if (last && last.title === title && last.url === url) continue;
+    sentTitles.set(id, { title, url });
+    browser.tabs.sendMessage(id, { type: "set-title", title, url }).catch(() => {});
+  }
+  return titles;
+}
+
+// A page reported its own title. Returns the title it should show.
+async function onPageTitle(tabId, title, url) {
+  await ready;
+  if (!settings.shortenTitles) return title;
+  const old = pageTitles.get(tabId);
+  pageTitles.set(tabId, { title, url });
+  savePageTitles();
+  if (old && siteOf(old.url) !== siteOf(url)) retitleSite(siteOf(old.url));
+  const mine = retitleSite(siteOf(url), tabId).get(tabId) ?? title;
+  sentTitles.set(tabId, { title: mine, url });
+  return mine;
+}
+
+// The tab closed or left the page we know about. Other tabs on its site may now be able
+// to drop their hints.
+function forgetPage(tabId) {
+  const old = pageTitles.get(tabId);
+  sentTitles.delete(tabId);
+  if (!old) return;
+  pageTitles.delete(tabId);
+  savePageTitles();
+  retitleSite(siteOf(old.url));
+}
+
+// The tab's address changed. If its page is still running our script (a single-page app),
+// ask it to report again; otherwise the old page is gone and a new one will report itself.
+async function onTabAddressChange(tabId) {
+  await ready;
+  if (!pageTitles.has(tabId)) return;
+  const alive = await browser.tabs.sendMessage(tabId, { type: "report-title" }).catch(() => false);
+  if (alive !== true) forgetPage(tabId);
+}
+
+async function syncTitleScript() {
+  const want = settings.shortenTitles && (await browser.permissions.contains({ origins: TITLE_ORIGINS }));
+  const registered = await browser.scripting.getRegisteredContentScripts({ ids: [TITLE_SCRIPT.id] });
+  if (want && !registered.length) {
+    await browser.scripting.registerContentScripts([TITLE_SCRIPT]);
+    // Pages opened before the option was turned on don't get the script, so add it now.
+    const tabs = await browser.tabs.query({ url: TITLE_ORIGINS });
+    await Promise.all(
+      tabs.map((t) => browser.scripting.executeScript({ target: { tabId: t.id }, files: TITLE_SCRIPT.js }).catch(() => {})),
+    );
+  } else if (!want && registered.length) {
+    // Pages already running the script restore their titles when the setting changes.
+    await browser.scripting.unregisterContentScripts({ ids: [TITLE_SCRIPT.id] });
+  }
+  if (!want && pageTitles.size) {
+    pageTitles.clear();
+    sentTitles.clear();
+    await savePageTitles();
+  }
+}
+
+// One sync at a time, so quick toggles can't register the script twice.
+let titleSync = Promise.resolve();
+function syncTitles() {
+  titleSync = titleSync
+    .then(syncTitleScript)
+    .catch((err) => console.error("Smart Group: title shortening failed", err));
+  return titleSync;
+}
+
+// If site access is taken away (in about:addons), turn the option off so pages restore their titles.
+browser.permissions.onRemoved.addListener(async () => {
+  if (!settings.shortenTitles || (await browser.permissions.contains({ origins: TITLE_ORIGINS }))) return;
+  settings = { ...settings, shortenTitles: false };
+  await browser.storage.sync.set({ settings });
+});
+browser.permissions.onAdded.addListener(syncTitles);
+
 // Run at most one regroup per window at a time, and batch bursts of tab events.
 const timers = new Map();
 const running = new Set();
@@ -165,8 +280,13 @@ async function scheduleAll() {
 browser.tabs.onCreated.addListener((tab) => schedule(tab.windowId));
 browser.tabs.onRemoved.addListener((id, info) => {
   placedBy.delete(id);
+  ready.then(() => forgetPage(id));
   if (!info.isWindowClosing) schedule(info.windowId);
 });
+browser.tabs.onUpdated.addListener(
+  (id) => onTabAddressChange(id).catch((err) => console.error("Smart Group: title update failed", err)),
+  { properties: ["url"] },
+);
 browser.tabs.onUpdated.addListener((_id, _change, tab) => schedule(tab.windowId), { properties: ["url", "pinned", "status"] });
 browser.tabs.onUpdated.addListener(
   (_id, change, tab) => {
@@ -184,13 +304,21 @@ browser.windows.onRemoved.addListener((windowId) => {
 browser.storage.onChanged.addListener(async (changes, area) => {
   if (area === "sync" && changes.settings) {
     settings = { ...DEFAULT_SETTINGS, ...(changes.settings.newValue || {}) };
+    syncTitles();
     await scheduleAll();
   }
 });
 
-browser.runtime.onMessage.addListener((msg) => {
+browser.runtime.onMessage.addListener((msg, sender) => {
   if (msg && msg.type === "regroup-now") return scheduleAll();
+  if (msg && msg.type === "page-title" && sender && sender.tab) {
+    return onPageTitle(sender.tab.id, String(msg.title || ""), String(msg.url || ""));
+  }
   return undefined;
 });
 
-loadState().then(scheduleAll);
+const ready = loadState();
+ready.then(() => {
+  syncTitles();
+  return scheduleAll();
+});

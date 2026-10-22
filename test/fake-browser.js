@@ -19,6 +19,11 @@ function createFakeBrowser() {
   const groups = new Map();
   let nextTab = 1, nextGroup = 100;
   const store = { sync: {}, session: {} };
+  const granted = new Set(); // host permissions the user has granted
+  const scripts = new Map(); // registered content scripts, by id
+  const injected = []; // tabIds that got executeScript
+  const sent = []; // [tabId, message] sent with tabs.sendMessage
+  const pages = new Map(); // tabId -> fake page script: (message) => response
 
   const cleanupGroups = () => {
     for (const id of groups.keys()) if (!tabs.some((t) => t.groupId === id)) groups.delete(id);
@@ -45,10 +50,12 @@ function createFakeBrowser() {
     storage: { sync: area("sync"), session: area("session"), onChanged: on("storage.onChanged") },
     runtime: { onMessage: on("runtime.onMessage") },
     tabs: {
-      query: async ({ windowId, pinned }) =>
+      query: async ({ windowId, pinned, url }) =>
         tabs
           .map((t, index) => ({ ...t, index }))
-          .filter((t) => t.windowId === windowId && (pinned === undefined || t.pinned === pinned)),
+          .filter((t) => windowId === undefined || t.windowId === windowId)
+          .filter((t) => pinned === undefined || t.pinned === pinned)
+          .filter((t) => url === undefined || /^https?:/.test(t.url)),
       group: async ({ tabIds, groupId, createProperties }) => {
         if (groupId === undefined) {
           groupId = nextGroup++;
@@ -70,6 +77,11 @@ function createFakeBrowser() {
         tabs.forEach((t) => ids.includes(t.id) && setGroup(t, -1));
         cleanupGroups();
       },
+      sendMessage: async (tabId, msg) => {
+        sent.push([tabId, structuredClone(msg)]);
+        if (!pages.has(tabId)) throw new Error("Could not establish connection. Receiving end does not exist.");
+        return pages.get(tabId)(msg);
+      },
       onCreated: on("tabs.onCreated"), onRemoved: on("tabs.onRemoved"), onUpdated: on("tabs.onUpdated"),
       onAttached: on("tabs.onAttached"), onDetached: on("tabs.onDetached"),
     },
@@ -80,10 +92,42 @@ function createFakeBrowser() {
       },
       update: async (id, props) => Object.assign(groups.get(id), props),
     },
+    permissions: {
+      contains: async ({ origins }) => origins.every((o) => granted.has(o)),
+      onAdded: on("permissions.onAdded"),
+      onRemoved: on("permissions.onRemoved"),
+    },
+    scripting: {
+      getRegisteredContentScripts: async ({ ids }) => ids.filter((id) => scripts.has(id)).map((id) => scripts.get(id)),
+      registerContentScripts: async (list) => {
+        for (const s of list) {
+          if (scripts.has(s.id)) throw new Error("duplicate script id " + s.id);
+          scripts.set(s.id, s);
+        }
+      },
+      unregisterContentScripts: async ({ ids }) => ids.forEach((id) => scripts.delete(id)),
+      executeScript: async ({ target }) => void injected.push(target.tabId),
+    },
   };
 
   const api = {
-    browser, tabs, groups, store,
+    browser, tabs, groups, store, scripts, injected, sent, pages,
+    // A content script sends a message; returns the background's reply.
+    async message(msg, sender) {
+      for (const { fn } of listeners["runtime.onMessage"] || []) {
+        const reply = fn(structuredClone(msg), sender);
+        if (reply !== undefined) return reply;
+      }
+      return undefined;
+    },
+    grant(origins) {
+      origins.forEach((o) => granted.add(o));
+      fire("permissions.onAdded", { origins });
+    },
+    revoke(origins) {
+      origins.forEach((o) => granted.delete(o));
+      fire("permissions.onRemoved", { origins });
+    },
     open(url, extra = {}) {
       const t = { id: nextTab++, windowId: 1, url, pinned: false, groupId: -1, ...extra };
       tabs.push(t);

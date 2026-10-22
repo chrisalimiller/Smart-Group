@@ -45,6 +45,7 @@ Open the menu, choose **Add-ons and themes**, click Smart Group, then **Options*
 - Add your own rules, like `acme.com` to a new "Acme" category or `github.com` to Work
 - List sites that should never be grouped
 - Turn built-in categories off (their tabs go to Miscellaneous)
+- **Shorten tab titles** (off by default): removes the site's name from tab titles, so "Lo-fi beats - YouTube" becomes "Lo-fi beats" and "Budget - Google Sheets" becomes "Budget". Unread counts like "(3)" are kept. Different pages on the same site never end up with the same title, even in different windows: if shortening would hide the difference, those tabs keep their full titles, and if the pages have the exact same title (like two "Untitled document" tabs), a short hint from the address goes in front, like "12 · Crash on start" for issue #12. The same page open twice can share a title. Firefox has no way for an add-on to rename a tab, so Smart Group changes the title inside each page; turning this on asks for permission to access websites. Turning it off (or removing that permission in about:addons) puts the full titles back.
 
 Changes apply right away. Settings sync through your Firefox account if you use one.
 
