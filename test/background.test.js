@@ -12,7 +12,7 @@ async function boot(setup) {
   const fake = createFakeBrowser();
   if (setup) await setup(fake);
   const ctx = vm.createContext({ browser: fake.browser, console, setTimeout, clearTimeout, URL, structuredClone });
-  for (const f of ["categories.js", "grouping.js", "background.js"]) {
+  for (const f of ["categories.js", "grouping.js", "titles.js", "background.js"]) {
     vm.runInContext(fs.readFileSync(path.join(SRC, f), "utf8"), ctx, { filename: f });
   }
   await wait(50);
@@ -174,6 +174,108 @@ test("every new site lands in a group, and exempting a site pulls it out", async
   await fake.browser.storage.sync.set({ settings: { exemptSites: ["target.com"] } });
   await wait();
   assert.strictEqual(fake.groups.size, 0);
+});
+
+const SITE_ACCESS = ["http://*/*", "https://*/*"];
+
+test("shortening titles only runs with the option on and site access granted", async () => {
+  const fake = await boot();
+  fake.open("https://github.com/a"); fake.open("about:newtab");
+  await wait(50);
+  assert.strictEqual(fake.scripts.size, 0, "off by default");
+
+  // Option on, but no site access yet: nothing runs.
+  await fake.browser.storage.sync.set({ settings: { shortenTitles: true } });
+  await wait(50);
+  assert.strictEqual(fake.scripts.size, 0);
+
+  // Access granted: the script is registered and added to open web pages only.
+  fake.grant(SITE_ACCESS);
+  await wait(50);
+  assert.deepStrictEqual([...fake.scripts.get("shorten-titles").js], ["title-content.js"]);
+  assert.deepStrictEqual(fake.injected, [fake.tabs.find((t) => t.url.startsWith("https")).id]);
+
+  await fake.browser.storage.sync.set({ settings: { shortenTitles: false } });
+  await wait(50);
+  assert.strictEqual(fake.scripts.size, 0, "turned off");
+});
+
+test("quick toggles don't register the title script twice", async () => {
+  const fake = await boot((f) => f.grant(SITE_ACCESS));
+  const set = (on) => fake.browser.storage.sync.set({ settings: { shortenTitles: on } });
+  await Promise.all([set(true), set(false), set(true), set(true)]);
+  await wait(50);
+  assert.strictEqual(fake.scripts.size, 1);
+});
+
+test("taking away site access turns the option off", async () => {
+  const fake = await boot(async (f) => {
+    f.grant(SITE_ACCESS);
+    await f.browser.storage.sync.set({ settings: { shortenTitles: true } });
+  });
+  assert.strictEqual(fake.scripts.size, 1, "registered on startup");
+  fake.revoke(SITE_ACCESS);
+  await wait(50);
+  assert.strictEqual(fake.store.sync.settings.shortenTitles, false);
+  assert.strictEqual(fake.scripts.size, 0);
+});
+
+// Boot with title shortening on, and give each tab a fake page that records the titles it's sent.
+async function bootWithTitles() {
+  const fake = await boot(async (f) => {
+    f.grant(SITE_ACCESS);
+    await f.browser.storage.sync.set({ settings: { shortenTitles: true } });
+  });
+  const shown = new Map(); // tabId -> title on screen
+  const report = async (tab, title) => {
+    const reply = await fake.message({ type: "page-title", title, url: tab.url }, { tab: { id: tab.id } });
+    shown.set(tab.id, reply);
+  };
+  const openPage = async (url, title) => {
+    const tab = fake.open(url);
+    fake.pages.set(tab.id, (msg) => {
+      if (msg.type === "set-title" && msg.url === tab.url) shown.set(tab.id, msg.title);
+      return true;
+    });
+    await report(tab, title);
+    return tab;
+  };
+  return { fake, shown, openPage, report };
+}
+
+test("different pages on one site get different titles, across windows", async () => {
+  const { fake, shown, openPage } = await bootWithTitles();
+  const a = await openPage("https://docs.google.com/spreadsheets/d/aaa/edit", "Budget - Google Sheets");
+  assert.strictEqual(shown.get(a.id), "Budget");
+
+  // Same full title, different page: both get a hint from their address.
+  const b = await openPage("https://docs.google.com/spreadsheets/d/bbb/edit", "Budget - Google Sheets");
+  fake.tabs.find((t) => t.id === b.id).windowId = 2;
+  await wait(50);
+  assert.strictEqual(shown.get(a.id), "aaa · Budget");
+  assert.strictEqual(shown.get(b.id), "bbb · Budget");
+
+  // The same page open twice is fine to share a title.
+  const c = await openPage("https://docs.google.com/spreadsheets/d/aaa/edit#gid=0", "Budget - Google Sheets");
+  assert.strictEqual(shown.get(c.id), "aaa · Budget");
+
+  // Closing the other page lets the rest go back to the short title.
+  fake.close(b.id);
+  await wait(50);
+  assert.strictEqual(shown.get(a.id), "Budget");
+  assert.strictEqual(shown.get(c.id), "Budget");
+});
+
+test("a tab that leaves the site no longer forces hints on the others", async () => {
+  const { fake, shown, openPage } = await bootWithTitles();
+  const a = await openPage("https://github.com/o/r/issues/1", "Bug - GitHub");
+  const b = await openPage("https://github.com/o/r/issues/2", "Bug - GitHub");
+  assert.strictEqual(shown.get(a.id), "1 · Bug");
+  // Full page load: the old page's script is gone, so the message to it fails.
+  fake.pages.delete(b.id);
+  fake.navigate(b.id, "https://example.com/");
+  await wait(50);
+  assert.strictEqual(shown.get(a.id), "Bug");
 });
 
 test("existing tabs get grouped on startup", async () => {

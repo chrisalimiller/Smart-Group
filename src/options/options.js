@@ -56,6 +56,7 @@ function tag(category) {
 
 function render() {
   $("enabled").checked = settings.enabled;
+  $("shortenTitles").checked = settings.shortenTitles;
   $("siteThreshold").value = settings.siteThreshold;
 
   const categories = new Set([...Object.keys(DEFAULT_CATEGORY_SITES), ...settings.customRules.map((r) => r.category)]);
@@ -116,6 +117,19 @@ function clampNumber(input, min, max, fallback) {
 }
 
 $("enabled").addEventListener("change", (e) => { settings.enabled = e.target.checked; save(); });
+$("shortenTitles").addEventListener("change", async (e) => {
+  const box = e.target;
+  if (box.checked) {
+    // Must be the first thing in the handler: Firefox only shows the prompt during a click.
+    const granted = await browser.permissions.request({ origins: ["http://*/*", "https://*/*"] });
+    if (!granted) {
+      box.checked = false;
+      return;
+    }
+  }
+  settings.shortenTitles = box.checked;
+  save();
+});
 $("siteThreshold").addEventListener("change", (e) => {
   settings.siteThreshold = clampNumber(e.target, 2, 20, DEFAULT_SETTINGS.siteThreshold); save();
 });

@@ -10,12 +10,18 @@
   "permissions": [
     "tabs",
     "tabGroups",
-    "storage"
+    "storage",
+    "scripting"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
   ],
   "background": {
     "scripts": [
       "categories.js",
       "grouping.js",
+      "titles.js",
       "background.js"
     ]
   },

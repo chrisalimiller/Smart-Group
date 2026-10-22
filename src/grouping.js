@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
   exemptSites: [], // sites that are never grouped
   customRules: [], // [{ site: "example.com", category: "Work" }]
   disabledCategories: [], // built-in categories the user turned off
+  shortenTitles: false, // drop the site name from tab titles (needs site access)
 };
 
 const GROUP_COLORS = ["blue", "cyan", "green", "yellow", "orange", "red", "pink", "purple", "grey"];
