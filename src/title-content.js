@@ -64,17 +64,17 @@
     applied = null;
   }
 
-  browser.runtime.onMessage.addListener((msg) => {
+  addMessageListener((msg) => {
     if (!active || !msg) return undefined;
     // Another tab on this site changed, so this one's title may need to change too.
     if (msg.type === "set-title") {
       if (msg.url === location.href) setTitle(msg.title);
-      return Promise.resolve(true);
+      return true;
     }
     // The address changed without a page load (single-page apps): report again.
     if (msg.type === "report-title") {
       report();
-      return Promise.resolve(true);
+      return true;
     }
     return undefined;
   });

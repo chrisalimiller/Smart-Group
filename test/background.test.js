@@ -8,16 +8,72 @@ const { createFakeBrowser } = require("./fake-browser.js");
 const SRC = path.join(__dirname, "..", "src");
 const wait = (ms = 600) => new Promise((r) => setTimeout(r, ms));
 
+async function load(fake, settle = true) {
+  const ctx = vm.createContext({ browser: fake.browser, console, setTimeout, clearTimeout, URL, structuredClone });
+  for (const f of ["compat.js", "categories.js", "grouping.js", "titles.js", "background.js"]) {
+    vm.runInContext(fs.readFileSync(path.join(SRC, f), "utf8"), ctx, { filename: f });
+  }
+  if (settle) await wait(50);
+}
+
 async function boot(setup) {
   const fake = createFakeBrowser();
   if (setup) await setup(fake);
-  const ctx = vm.createContext({ browser: fake.browser, console, setTimeout, clearTimeout, URL, structuredClone });
-  for (const f of ["categories.js", "grouping.js", "titles.js", "background.js"]) {
-    vm.runInContext(fs.readFileSync(path.join(SRC, f), "utf8"), ctx, { filename: f });
-  }
-  await wait(50);
+  await load(fake);
   return fake;
 }
+
+// Chrome kills an idle service worker; a new one starts with no memory of the old one.
+async function restart(fake, settle = true) {
+  fake.dropListeners();
+  await load(fake, settle);
+}
+
+test("after the worker restarts, its own groups are reused and its own moves teach nothing", async () => {
+  const fake = await boot();
+  fake.open("https://amazon.com"); fake.open("https://ebay.com"); fake.open("https://reddit.com");
+  await wait();
+  const before = [...fake.groups.keys()].sort();
+  await restart(fake);
+  fake.open("https://etsy.com");
+  await wait();
+  assert.deepStrictEqual(fake.layout(), { Shopping: ["amazon.com", "ebay.com", "etsy.com"], Social: ["reddit.com"] });
+  assert.deepStrictEqual([...fake.groups.keys()].sort(), before, "no groups were recreated");
+  assert.strictEqual((fake.store.sync.settings || {}).customRules, undefined, "nothing was learned");
+});
+
+test("a group-change event that wakes a restarted worker is not mistaken for a user move", async () => {
+  const fake = await boot();
+  const t = fake.open("https://amazon.com"); fake.open("https://ebay.com");
+  await wait();
+  await restart(fake, false); // the event arrives before the new worker has regrouped anything
+  fake.update(t.id, { groupId: t.groupId });
+  await wait();
+  assert.strictEqual((fake.store.sync.settings || {}).customRules, undefined);
+});
+
+test("after a restart, a tab the user drags is still learned", async () => {
+  const fake = await boot();
+  const t = fake.open("https://amazon.com"); fake.open("https://reddit.com");
+  await wait();
+  await restart(fake);
+  fake.moveToGroup(t.id, fake.groupByTitle("Social").id);
+  await wait();
+  assert.deepStrictEqual(fake.store.sync.settings.customRules, [{ site: "amazon.com", category: "Social" }]);
+});
+
+test("after a restart, user-made groups are still left alone", async () => {
+  const fake = await boot();
+  const mine = fake.open("https://x.com");
+  fake.groups.set(999, { id: 999, title: "Mine", color: "red", windowId: 1 });
+  mine.groupId = 999;
+  fake.open("https://instagram.com");
+  await wait();
+  await restart(fake);
+  fake.open("https://reddit.com");
+  await wait();
+  assert.deepStrictEqual(fake.layout()["Mine"], ["x.com"]);
+});
 
 test("groups tabs as they open, and regroups when one closes", async () => {
   const fake = await boot();
@@ -192,7 +248,7 @@ test("shortening titles only runs with the option on and site access granted", a
   // Access granted: the script is registered and added to open web pages only.
   fake.grant(SITE_ACCESS);
   await wait(50);
-  assert.deepStrictEqual([...fake.scripts.get("shorten-titles").js], ["title-content.js"]);
+  assert.deepStrictEqual([...fake.scripts.get("shorten-titles").js], ["compat.js", "title-content.js"]);
   assert.deepStrictEqual(fake.injected, [fake.tabs.find((t) => t.url.startsWith("https")).id]);
 
   await fake.browser.storage.sync.set({ settings: { shortenTitles: false } });

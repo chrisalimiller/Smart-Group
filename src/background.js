@@ -2,7 +2,7 @@
 // with the plan from grouping.js. Only touches groups it created itself, so groups
 // the user makes by hand are left alone.
 
-/* global planGroups, DEFAULT_SETTINGS, siteOf, isExempt, normalizeSitePattern, titlesForSite */
+/* global planGroups, DEFAULT_SETTINGS, siteOf, isExempt, normalizeSitePattern, titlesForSite, addMessageListener, addUpdatedListener */
 
 const NO_GROUP = -1;
 let settings = { ...DEFAULT_SETTINGS };
@@ -17,13 +17,16 @@ const placedBy = new Map();
 async function loadState() {
   const stored = await browser.storage.sync.get("settings");
   settings = { ...DEFAULT_SETTINGS, ...(stored.settings || {}) };
-  const session = await browser.storage.session.get(["managed", "pageTitles"]);
+  const session = await browser.storage.session.get(["managed", "pageTitles", "placedBy"]);
   managed = session.managed || {};
   pageTitles = new Map(Object.entries(session.pageTitles || {}).map(([id, p]) => [Number(id), p]));
+  for (const [id, groupId] of Object.entries(session.placedBy || {})) placedBy.set(Number(id), groupId);
 }
 
+// placedBy is saved too: Chrome stops this worker when idle, and without it a restart would
+// mistake the extension's own earlier moves for ones the user made.
 function saveManaged() {
-  return browser.storage.session.set({ managed });
+  return browser.storage.session.set({ managed, placedBy: Object.fromEntries(placedBy) });
 }
 
 function managedIds(windowId) {
@@ -110,6 +113,7 @@ async function regroupWindow(windowId) {
 // When the user drags a tab into one of our category groups, remember the tab's site
 // so it goes to that category from now on. Saved as a custom rule, editable in Options.
 async function learnFromMove(tab) {
+  await ready;
   if (!settings.enabled || tab.pinned || placedBy.get(tab.id) === tab.groupId) return;
   const groups = managed[tab.windowId] || {};
   const key = Object.keys(groups).find((k) => groups[k] === tab.groupId);
@@ -135,7 +139,7 @@ async function learnFromMove(tab) {
 const TITLE_ORIGINS = ["http://*/*", "https://*/*"];
 const TITLE_SCRIPT = {
   id: "shorten-titles",
-  js: ["title-content.js"],
+  js: ["compat.js", "title-content.js"],
   matches: TITLE_ORIGINS,
   runAt: "document_idle",
   persistAcrossSessions: false,
@@ -263,6 +267,7 @@ async function run(windowId) {
   }
   running.add(windowId);
   try {
+    await ready;
     await regroupWindow(windowId);
   } catch (err) {
     console.error("Smart Group: regroup failed", err);
@@ -283,16 +288,12 @@ browser.tabs.onRemoved.addListener((id, info) => {
   ready.then(() => forgetPage(id));
   if (!info.isWindowClosing) schedule(info.windowId);
 });
-browser.tabs.onUpdated.addListener(
-  (id) => onTabAddressChange(id).catch((err) => console.error("Smart Group: title update failed", err)),
-  { properties: ["url"] },
+addUpdatedListener(["url"], (id) =>
+  onTabAddressChange(id).catch((err) => console.error("Smart Group: title update failed", err)),
 );
-browser.tabs.onUpdated.addListener((_id, _change, tab) => schedule(tab.windowId), { properties: ["url", "pinned", "status"] });
-browser.tabs.onUpdated.addListener(
-  (_id, change, tab) => {
-    if ("groupId" in change) learnFromMove(tab).catch((err) => console.error("Smart Group: learning failed", err));
-  },
-  { properties: ["groupId"] },
+addUpdatedListener(["url", "pinned", "status"], (_id, _change, tab) => schedule(tab.windowId));
+addUpdatedListener(["groupId"], (_id, _change, tab) =>
+  learnFromMove(tab).catch((err) => console.error("Smart Group: learning failed", err)),
 );
 browser.tabs.onAttached.addListener((_id, info) => schedule(info.newWindowId));
 browser.tabs.onDetached.addListener((_id, info) => schedule(info.oldWindowId));
@@ -309,7 +310,7 @@ browser.storage.onChanged.addListener(async (changes, area) => {
   }
 });
 
-browser.runtime.onMessage.addListener((msg, sender) => {
+addMessageListener((msg, sender) => {
   if (msg && msg.type === "regroup-now") return scheduleAll();
   if (msg && msg.type === "page-title" && sender && sender.tab) {
     return onPageTitle(sender.tab.id, String(msg.title || ""), String(msg.url || ""));
