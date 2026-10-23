@@ -2,7 +2,12 @@
 # then makes a GitHub release with the notes. Mozilla signs and publishes it once approved.
 # Needs two repository secrets from https://addons.mozilla.org/developers/addon/api/key/ :
 #   AMO_JWT_ISSUER and AMO_JWT_SECRET
-# To release: bump "version" in src/manifest.json, then push a tag like v0.1.0.
+# The "chrome" job also uploads the Chrome version to the Chrome Web Store and submits it for
+# review, if these four secrets are set (see README); without them it only attaches the zip
+# to the GitHub release:
+#   CWS_EXTENSION_ID, CWS_CLIENT_ID, CWS_CLIENT_SECRET, CWS_REFRESH_TOKEN
+# To release: bump "version" in src/manifest.json (the Chrome build uses it too), then push a
+# tag like v0.1.0.
 name: Release
 on:
   push:
@@ -37,3 +42,33 @@ jobs:
         run: gh release create "$GITHUB_REF_NAME" --title "Smart Group $GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
+  chrome:
+    # After "sign", because that job creates the GitHub release this one adds the zip to.
+    needs: sign
+    runs-on: ubuntu-latest
+    env:
+      # Job level, because a step's `if` can't see that same step's `env`.
+      CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run zip:chrome
+      - name: Attach the zip to the GitHub release
+        run: gh release upload "$GITHUB_REF_NAME" dist/smart-group-chrome-*.zip --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Upload to the Chrome Web Store and submit for review
+        # Skipped until the store listing exists and the secrets are added.
+        if: ${{ env.CWS_EXTENSION_ID != '' }}
+        run: >
+          npx --yes chrome-webstore-upload-cli@3
+          --source dist/smart-group-chrome-*.zip
+        env:
+          EXTENSION_ID: ${{ env.CWS_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}

@@ -16,3 +16,9 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm test
       - run: npm run lint
+      # Builds the Chrome version too, so a broken manifest or icon step fails here.
+      - run: npm run zip:chrome
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smart-group-chrome
+          path: dist/smart-group-chrome-*.zip

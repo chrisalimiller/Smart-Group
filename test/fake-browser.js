@@ -29,7 +29,9 @@ function createFakeBrowser() {
     for (const id of groups.keys()) if (!tabs.some((t) => t.groupId === id)) groups.delete(id);
   };
   const area = (name) => ({
-    get: async (key) => (key in store[name] ? { [key]: structuredClone(store[name][key]) } : {}),
+    // Like the real API, takes one key or a list of keys.
+    get: async (keys) =>
+      Object.fromEntries([].concat(keys).filter((k) => k in store[name]).map((k) => [k, structuredClone(store[name][k])])),
     set: async (obj) => {
       const changes = {};
       for (const [k, v] of Object.entries(obj)) {
@@ -114,11 +116,18 @@ function createFakeBrowser() {
     browser, tabs, groups, store, scripts, injected, sent, pages,
     // A content script sends a message; returns the background's reply.
     async message(msg, sender) {
+      // Like Chrome: a listener replies through sendResponse and returns true.
       for (const { fn } of listeners["runtime.onMessage"] || []) {
-        const reply = fn(structuredClone(msg), sender);
-        if (reply !== undefined) return reply;
+        let respond;
+        const response = new Promise((resolve) => (respond = resolve));
+        if (fn(structuredClone(msg), sender, respond) === true) return response;
       }
       return undefined;
+    },
+    // Chrome stops an idle service worker: its listeners and variables are gone, but tabs,
+    // groups and storage stay. Call this, then load the scripts again.
+    dropListeners() {
+      for (const k of Object.keys(listeners)) delete listeners[k];
     },
     grant(origins) {
       origins.forEach((o) => granted.add(o));
@@ -143,6 +152,10 @@ function createFakeBrowser() {
       const t = tabs.find((x) => x.id === id);
       t.url = url;
       fireUpdated(id, { url });
+    },
+    // Delivers a tabs.onUpdated event without changing anything (e.g. one that arrives late).
+    update(id, change) {
+      fireUpdated(id, change);
     },
     pin(id) {
       const t = tabs.find((x) => x.id === id);

@@ -19,6 +19,7 @@
   ],
   "background": {
     "scripts": [
+      "compat.js",
       "categories.js",
       "grouping.js",
       "titles.js",

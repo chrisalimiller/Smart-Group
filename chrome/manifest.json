@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Smart Group",
+  "minimum_chrome_version": "102",
+  "description": "Automatically groups your tabs by website or by category, using Chrome's built-in tab groups.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "storage",
+    "scripting"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "sw.js"
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  }
+}

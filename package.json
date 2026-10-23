@@ -2,14 +2,17 @@
   "name": "smart-group",
   "version": "0.1.0",
   "private": true,
-  "description": "Firefox extension that automatically groups tabs by website or category.",
+  "description": "Browser extension (Firefox and Chrome) that automatically groups tabs by website or category.",
   "scripts": {
     "start": "web-ext run --source-dir src",
     "lint": "web-ext lint --source-dir src",
     "build": "web-ext build --source-dir src --artifacts-dir dist --overwrite-dest",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "build:chrome": "node scripts/build-chrome.mjs",
+    "zip:chrome": "npm run build:chrome && web-ext build --source-dir dist/chrome --artifacts-dir dist --filename smart-group-chrome-{version}.zip --overwrite-dest"
   },
   "devDependencies": {
+    "sharp": "^0.35.5",
     "web-ext": "^8.3.0"
   }
 }
