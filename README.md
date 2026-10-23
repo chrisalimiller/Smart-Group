@@ -8,7 +8,7 @@ A browser extension that automatically organizes your tabs using the browser's b
 - Groups get their own color and label, and work with tabs on top or vertical tabs on the side.
 - A settings page lets you assign sites to categories, keep an exempt list, and change the threshold.
 
-> Status: v0.1.0. Auto-grouping and settings work; submitting to the Firefox Add-ons store next. The Chrome version is new: it builds and passes the simulated-browser tests, but it isn't on the Chrome Web Store yet and hasn't had much testing in a real Chrome.
+> Status: v0.1.0. Auto-grouping and settings work; submitting to the Firefox Add-ons store next. The Chrome version is new: it loads and groups tabs in Chrome and passes the simulated-browser tests, but it isn't on the Chrome Web Store yet.
 
 ## Requirements
 
@@ -44,7 +44,7 @@ After changing the code, run `npm run build:chrome` again and click the reload b
 3. Every remaining tab is sorted into a category (Shopping, Social, Video, Music, News, Email, Work, Dev, AI, Reference, Travel, Finance). Known sites come from the list in `src/categories.js`. For a site that isn't on the list, Smart Group looks for clues in its address and page title (for example "shop", "flights", or "news"), and treats `.edu` and `.gov` sites as Reference.
 4. Anything that still doesn't fit goes into a **Miscellaneous** group.
 5. Groups update automatically as you open, close, and navigate tabs.
-6. **It learns from you.** Drag a tab into one of Smart Group's category groups (like Shopping or Miscellaneous) and that tab's site goes to that category from then on. This is saved as a rule you can see or remove in Settings. Moves into site groups or groups you made yourself don't create rules, and a site with 3 or more open tabs still gets its own site group.
+6. **It learns from you.** Move a tab into one of Smart Group's category groups (like Shopping or Miscellaneous) and that tab's site goes to that category from then on. In Firefox, drag the tab into the group. In Chrome, dragging a tab that is in a group moves the whole group, so right-click the tab and choose **Add tab to group** instead. This is saved as a rule you can see or remove in Settings. Moves into site groups or groups you made yourself don't create rules, and a site with 3 or more open tabs still gets its own site group.
 7. Groups you make yourself are never touched. Turning the extension off removes the groups it made.
 
 ## Settings
