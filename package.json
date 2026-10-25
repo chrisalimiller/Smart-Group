@@ -1,6 +1,6 @@
 {
   "name": "smart-group",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Browser extension (Firefox and Chrome) that automatically groups tabs by website or category.",
   "scripts": {
